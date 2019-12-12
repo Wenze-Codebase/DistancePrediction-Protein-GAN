@@ -1,0 +1,209 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+
+from __future__ import print_function
+
+import sys
+
+import os
+
+import numpy as np
+
+import Bio.SeqIO
+
+import prody
+
+import tensorflow as tf
+from tensorflow.python.platform import gfile
+
+
+"Set these before usage"
+Amoeba    = 'XXXX'
+HHLIB     = 'XXXX'
+CCMPRED   = 'XXXX'
+DEEPCNF   = 'XXXX'
+SPIDER3   = 'XXXX'
+
+UNIPROT20 = 'XXXX'
+
+
+if __name__ == '__main__':
+
+
+	if len(sys.argv) == 1:
+		print('''Usage: AmoebaContact input.fasta output_dir [options]
+
+Options:
+	-d DEVICE_ID  : Calculate on CUDA device number DEVICE_ID (set to -1 to use CPU) [default: 0]
+	-t THREAD_NUM : Define the thread used for the calculation. [defalut 1]
+''')
+		exit()
+
+	if len(sys.argv) < 3:
+		print('''Usage: AmoebaContact input.fasta output.mat [options]
+
+Options:
+	-d DEVICE_ID  : Calculate on CUDA device number DEVICE_ID (set to -1 to use CPU) [default: 0]
+	-t THREAD_NUM : Define the thread used for the calculation. [defalut 1]
+''')
+		raise ValueError('Wrong number of parameters.')
+
+
+	infile, output_dir = sys.argv[1:3]
+
+	name = os.path.splitext(os.path.split(infile)[1])[0]
+	print("Target Name: {0}".format(name))
+
+	DEVICE = '0'
+	if len(sys.argv) > 3:
+		if '-d' in sys.argv:
+			index = sys.argv.index('-d')+1
+			if index < len(sys.argv):
+				if sys.argv[index] == '-1':
+					DEVICE = ''
+				else:
+					DEVICE = sys.argv[index]
+	print('Use CUDE DEVICE: {0}'.format(DEVICE))
+
+	THREAD = '1'
+	if len(sys.argv) > 3:
+		if '-t' in sys.argv:
+			index = sys.argv.index('-t')+1
+			if index < len(sys.argv):
+				THREAD = sys.argv[index]
+	print('Use THREAD number: {0}'.format(THREAD))
+
+	infile = os.path.abspath(infile)
+
+	output_dir = os.path.abspath(output_dir)
+	if not os.path.exists(output_dir):
+		print('Making Output Directory...')
+		os.mkdir(output_dir)
+
+	f = open(infile, 'r')
+	content = f.read()
+	f.close()
+	f = open('{}/{}.fasta'.format(output_dir, name), 'w')
+	f.write(content)
+	f.close()
+	infile = '{}/{}.fasta'.format(output_dir, name)
+	if not os.path.exists(infile):
+		raise ValueError('Cannot read fasta input.')
+
+	if not os.path.exists('{0}/{1}.a3m'.format(output_dir, name)):
+		if not os.path.exists('{0}/bin/hhblits'.format(HHLIB)):
+			print('Cannot find hhblits at: {0}/bin/hhblits'.format(HHLIB))
+			raise ValueError('HHLIB path wrong.')
+		if not os.path.exists('{0}'.format('/'.join(UNIPROT20.split('/')[:-1]))):
+			print('Cannot find UNIPROT20 database at: {0}'.format(
+				'/'.join(UNIPROT20.split('/')[:-1])))
+			raise ValueError('UNIPROT20 path wrong.')
+		print('Runing hhblits to get a3m alignment')
+		output = os.popen('cd {2};{0}/bin/hhblits -i {1} -oa3m {3}.a3m -all -maxfilt 100000 -realign_max 100000 -B 100000 -Z 100000 -d {4} -cpu {5} 2>&1'.format(
+			HHLIB, infile, output_dir, name, UNIPROT20, THREAD)).read()
+		if not os.path.exists('{0}/{1}.a3m'.format(output_dir, name)):
+			print(output)
+			raise ValueError('Cannot generate a3m alignment')
+	else:
+		print('a3m alignment is already generated.')
+
+	if not os.path.exists('{0}/{1}.filt.a3m'.format(output_dir, name)):
+		if not os.path.exists('{0}/bin/hhfilter'.format(HHLIB)):
+			print('Cannot find hhfilter at: {0}/bin/hhfilter'.format(HHLIB))
+			raise ValueError('HHLIB path wrong.')
+		print('Runing hhfilter to filter a3m alignment')
+		output = os.popen(
+			'export HHLIB={0};{0}/bin/hhfilter -i {1}/{2}.a3m -o {1}/{2}.filt.a3m -id 90 -neff 15 -qsc -30 2>&1'.format(HHLIB, output_dir, name)).read()
+		if not os.path.exists('{0}/{1}.filt.a3m'.format(output_dir, name)):
+			print(output)
+			raise ValueError('Cannot generate a3m filtered alignment')
+	else:
+		print('filtered a3m alignment is already generated.')
+
+	if not os.path.exists('{0}/{1}-msa.fasta'.format(output_dir, name)):
+		if not os.path.exists('{0}/scripts/reformat.pl'.format(HHLIB)):
+			print(
+				'Cannot find reformat.pl at: {0}/scripts/reformat.pl'.format(HHLIB))
+			raise ValueError('HHLIB path wrong.')
+		print('Runing reformat.pl to reformat a3m alignment to fasta')
+		output = os.popen(
+			'export HHLIB={0};{0}/scripts/reformat.pl {1}/{2}.filt.a3m {1}/{2}-msa.fasta -r 2>&1'.format(HHLIB, output_dir, name)).read()
+		if not os.path.exists('{0}/{1}-msa.fasta'.format(output_dir, name)):
+			print(output)
+			raise ValueError('Cannot generate fasta alignment')
+	else:
+		print('fasta alignment is already generated.')
+
+	if not os.path.exists('{0}/{1}.aln'.format(output_dir, name)):
+		print('Converting fasta alignment to aln')
+		f_in = open('{0}/{1}-msa.fasta'.format(output_dir, name), "r")
+		f_out = open('{0}/{1}.aln'.format(output_dir, name), "w")
+		for record in Bio.SeqIO.parse(f_in, 'fasta'):
+			f_out.write(str(record.seq))
+			f_out.write("\n")
+		f_in.close()
+		f_out.close()
+		if not os.path.exists('{0}/{1}.aln'.format(output_dir, name)):
+			raise ValueError('Cannot generate aln alignment')
+	else:
+		print('aln alignment is already generated.')
+
+	if not os.path.exists('{0}/{1}-ccmpred.result'.format(output_dir, name)):
+		if not os.path.exists('{0}/bin/ccmpred'.format(CCMPRED)):
+			print('Cannot find ccmpred at: {0}/bin/ccmpred'.format(CCMPRED))
+			raise ValueError('CCMPRED path wrong.')
+		print('Runing CCMpred')
+		if DEVICE:
+			output = os.popen("{0}/bin/ccmpred -d {1} {2}/{3}.aln {2}/{3}-ccmpred.result 2>&1".format(
+				CCMPRED, DEVICE, output_dir, name)).read()
+		else:
+			output = os.popen("{0}/bin/ccmpred -t {1} {2}/{3}.aln {2}/{3}-ccmpred.result 2>&1".format(
+				CCMPRED, THREAD, output_dir, name)).read()
+		if not os.path.exists('{0}/{1}-ccmpred.result'.format(output_dir, name)):
+			print(output)
+			raise ValueError('Cannot generate CCMpred')
+	else:
+		print('CCMpred is already generated.')
+
+	if not os.path.exists('{0}/{1}-mi.result'.format(output_dir, name)):
+		print('Runing MI')
+		msa = prody.parseMSA('{0}/{1}-msa.fasta'.format(output_dir, name))
+		mi = prody.buildMutinfoMatrix(msa)
+		np.savetxt('{0}/{1}-mi.result'.format(output_dir, name), mi)
+		if not os.path.exists('{0}/{1}-ccmpred.result'.format(output_dir, name)):
+			raise ValueError('Cannot generate MI')
+	else:
+		print('MI is already generated.')
+
+	if not (os.path.exists('{0}/{1}.ss3'.format(output_dir, name)) and os.path.exists('{0}/{1}.ss8'.format(output_dir, name))):
+		if not os.path.exists('{0}/DeepCNF_SS.sh'.format(DEEPCNF)):
+			print(
+				'Cannot find DeepCNF_SS.sh at: {0}/DeepCNF_SS.sh'.format(DEEPCNF))
+			raise ValueError('DeepCNF path wrong.')
+		print('Runing DeepCNF')
+		output = os.popen('cd {0};{1}/DeepCNF_SS.sh -i {2} -c {3} 2>&1'.format(
+			output_dir, DEEPCNF, infile, THREAD)).read()
+		if os.path.exists('{0}/{1}.ss3'.format(output_dir, name)) and os.path.getsize('{0}/{1}.ss3'.format(output_dir, name)) == 0:
+			os.remove('{0}/{1}.ss3'.format(output_dir, name))
+		if os.path.exists('{0}/{1}.ss8'.format(output_dir, name)) and os.path.getsize('{0}/{1}.ss8'.format(output_dir, name)) == 0:
+			os.remove('{0}/{1}.ss8'.format(output_dir, name))
+		if not (os.path.exists('{0}/{1}.ss3'.format(output_dir, name)) and os.path.exists('{0}/{1}.ss8'.format(output_dir, name))):
+			print(output)
+			raise ValueError('Cannot generate DeepCNF')
+	else:
+		print('DeepCNF is already generated.')
+
+	if not os.path.exists('{0}/{1}.spd33'.format(output_dir, name)):
+		if not os.path.exists('{0}/run_list.sh'.format(SPIDER3)):
+			print(
+				'Cannot find run_list.sh at: {0}/run_list.sh'.format(SPIDER3))
+			raise ValueError('SPIDER3 path wrong.')
+		print('Runing SPIDER3')
+		output = os.popen(
+			'cd {0};{1}/run_list.sh {2} 2>&1'.format(output_dir, SPIDER3, infile)).read()
+		if not os.path.exists('{0}/{1}.spd33'.format(output_dir, name)):
+			print(output)
+			raise ValueError('Cannot generate SPIDER3')
+	else:
+		print('SPIDER3 is already generated.')
