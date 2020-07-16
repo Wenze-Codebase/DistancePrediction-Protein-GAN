@@ -19,7 +19,7 @@ from tensorflow.python.platform import gfile
 
 
 "Set these before usage"
-Amoeba    = 'XXXX'
+
 HHLIB     = 'XXXX'
 CCMPRED   = 'XXXX'
 DEEPCNF   = 'XXXX'
@@ -32,7 +32,7 @@ if __name__ == '__main__':
 
 
 	if len(sys.argv) == 1:
-		print('''Usage: AmoebaContact input.fasta output_dir [options]
+		print('''Usage: 3rd_party protein_name out_final [options]
 
 Options:
 	-d DEVICE_ID  : Calculate on CUDA device number DEVICE_ID (set to -1 to use CPU) [default: 0]
@@ -41,7 +41,7 @@ Options:
 		exit()
 
 	if len(sys.argv) < 3:
-		print('''Usage: AmoebaContact input.fasta output.mat [options]
+		print('''Usage: 3rd_party protein_name out_final [options]
 
 Options:
 	-d DEVICE_ID  : Calculate on CUDA device number DEVICE_ID (set to -1 to use CPU) [default: 0]
