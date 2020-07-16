@@ -2,7 +2,9 @@
 
 # Tips for usage:
 ## "GAN"
-The folder 'GAN' contains training and model exportation codes. Once the training data (features and lables) were prepared (usually the "TFRecord format"), training process could be executed via "python main.py --mode train --XXX", where related parameters could be controled by --XXX (see main.py for details). The model exportation could be conduced through "python main.py --mode export --XXX".        
+The folder 'GAN' contains training and model exportation codes. Once the training data (features and lables) were prepared (usually the "TFRecord format"), training process could be executed via "python main.py --mode train --XXX", where related parameters could be controled by --XXX (see main.py for details). The model exportation could be conduced through "python main.py --mode export --XXX". 
+You can use this code to train a customized model for your own academic purpose.
+Notice: Our code is compatible with tensorflow version 1. More specifically, our environment is tf.1.10.0.
 ## "distance"
 This folder is for the final inference once the model (generator) is exported.
 ## "feature"
